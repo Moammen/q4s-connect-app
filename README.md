@@ -1,18 +1,64 @@
-# q4s-connect-app
+# Q4S Connect App
 
-Monorepo for the Q4S / ETS (Energy Transfer Station) platform.
+## First Time Setup
 
-## Projects
+**1. Build & start the monitoring app**
+```cmd
+cd q4s_site_monitoring
+docker compose up -d --build
+```
+→ Runs on http://127.0.0.1:1887 | Admin: `admin` / `123456789`
 
-- **`q4s_connect/`** — Main Django + DRF backend for ETS monitoring and billing
-  of district-cooling chilled-water systems. Collects BTU-meter telemetry over
-  OPC UA, stores live and historical readings, runs alarm rules and Celery-based
-  polling, and manages monthly delta-T / consumption billing.
-- **`q4s_site_monitoring/`** — Companion service for shareable, password-protected
-  external site-dashboard links.
+**2. Build & start the main app**
+```cmd
+cd ..\q4s_connect
+docker compose up -d --build
+```
+→ Runs on http://127.0.0.1:8000
 
-## Notes
+**3. Run the seed**
+```cmd
+docker compose exec web python manage.py seed
+```
+Takes 1–2 minutes. Creates 10 Dubai sites with 10 months of data (~110,000 rows).
 
-- Secrets (the `Cloud/` folder, `.env`, credential files) are gitignored and must
-  not be committed.
-- Each project has its own virtual environment (`venv/` / `.venv/`), also ignored.
+---
+
+## Every Day
+
+```cmd
+cd q4s_site_monitoring
+docker compose up -d
+
+cd ..\q4s_connect
+docker compose up -d
+```
+
+## Stop
+
+```cmd
+cd q4s_connect && docker compose down
+cd ..\q4s_site_monitoring && docker compose down
+```
+
+---
+
+## Run the Seed Again
+
+Safe to run anytime — it clears old data and starts fresh. No duplicates.
+
+```cmd
+cd q4s_connect
+docker compose exec web python manage.py seed
+```
+
+---
+
+## Users (after seed)
+
+| Username | Password | Role |
+|---|---|---|
+| `admin_dxb` | `Admin@2026` | Admin |
+| `manager_dxb` | `Manager@2026` | Admin |
+| `engineer1` | `Engineer@2026` | Engineer |
+| `operator1` | `Operator@2026` | Operator |

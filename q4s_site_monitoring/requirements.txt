@@ -8,6 +8,7 @@ djangorestframework==3.17.1
 idna==3.16
 psycopg2-binary==2.9.12
 requests==2.34.2
+django-cors-headers
 sqlparse==0.5.5
 tzdata==2026.2
 urllib3==2.7.0
