@@ -18,6 +18,7 @@ docker compose up -d --build
 
 **3. Run the seed**
 ```cmd
+cd q4s_connect
 docker compose exec web python manage.py seed
 ```
 Takes 1–2 minutes. Creates 10 Dubai sites with 10 months of data (~110,000 rows).
