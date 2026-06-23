@@ -1,0 +1,14 @@
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Claude / Cowork — do not push
+.claude/
+CLAUDE.md
+.claude.json
+.mcp.json

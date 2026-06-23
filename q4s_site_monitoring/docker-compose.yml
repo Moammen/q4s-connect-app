@@ -1,0 +1,61 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: q4s_site_monitoring_web
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py shell
+             -c \"import os;
+              from django.contrib.auth import get_user_model;
+              User = get_user_model();
+              username=os.environ.get('DJANGO_SUPERUSER_USERNAME');
+              email=os.environ.get('DJANGO_SUPERUSER_EMAIL');
+              password=os.environ.get('DJANGO_SUPERUSER_PASSWORD');
+              user, created = User.objects.get_or_create(username=username, defaults={'email': email, 'is_staff': True, 'is_superuser': True});
+              user.email=email;
+              user.is_staff=True;
+              user.is_superuser=True;
+              user.set_password(password);
+            user.save()\" &&
+             python manage.py runserver 0.0.0.0:8008"
+    ports:
+      - "1887:8008"
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DJANGO_SUPERUSER_USERNAME=admin
+      - DJANGO_SUPERUSER_EMAIL=admin@example.com
+      - DJANGO_SUPERUSER_PASSWORD=123456789
+      - DJANGO_SETTINGS_MODULE=q4s_site_monitoring.settings
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=mydb
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin123
+      - POSTGRES_PORT=5432
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: q4s_site_monitoring_postgres
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=mydb
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin123
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
