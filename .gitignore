@@ -1,0 +1,39 @@
+# ===== Python / virtualenv =====
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ===== Django =====
+*.log
+*.sqlite3
+db.sqlite3
+**/staticfiles/
+**/media/
+.env
+*.env
+
+# ===== Secrets / credentials — DO NOT PUSH =====
+Cloud/
+**/cerdential.txt
+**/credential*.txt
+**/codes.txt
+**/env.txt
+*.pem
+*.key
+
+# ===== Claude / Cowork — do not push =====
+.claude/
+CLAUDE.md
+.claude.json
+.mcp.json
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

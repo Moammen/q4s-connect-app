@@ -1,0 +1,23 @@
+# Python / virtualenv
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Django
+*.log
+*.sqlite3
+db.sqlite3
+/staticfiles/
+/media/
+.env
+
+# Claude / Cowork — do not push
+.claude/
+CLAUDE.md
+.claude.json
+.mcp.json

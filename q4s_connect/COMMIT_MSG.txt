@@ -1,0 +1,27 @@
+feat(backend): rename project module to q4s_connect, dockerize, add low delta-T monitor
+
+Project module rename
+- Renamed Django project module ETS/ to q4s_connect/
+- Updated DJANGO_SETTINGS_MODULE in manage.py, wsgi.py, asgi.py, celery_app.py
+- Updated ROOT_URLCONF and WSGI_APPLICATION in settings.py
+- Renamed Celery app instance from Celery("ETS") to Celery("q4s_connect")
+- Updated docker-compose.yml and CELERY_REDIS_DEPLOYMENT.md to use new module name
+- Removed obsolete "version: 3.8" key from docker-compose.yml
+
+Docker setup
+- Added one-shot "migrations" service that runs manage.py migrate and exits
+- Added "web" service running Django dev server on port 8000
+- Wired celery-beat and workers to wait for migrations via service_completed_successfully
+- All celery services now depend on migrations rather than postgres directly
+
+Low delta-T dashboard monitor (core/views.py + opc/helpers.py)
+- New helper get_last_billing_period(today, billing_day) - returns the most
+  recently completed billing cycle (end = most recent past billing_day,
+  start = one month earlier). Falls back to billing_day=1 when none is set.
+- New helper find_low_delta_t_sites(reference_date=None) - iterates non-deleted
+  sites with billing_config, reuses calculate_site_billing() to compute the
+  absolute avg delta-T and projected delta_t_fees, and returns sites whose
+  drop = contracted - avg - tolerance is positive.
+- New helper get_low_delta_t_sites_cached(max_age_hours=24) - process-local
+  cache that recomputes only on first call or once the cache exceeds max_age_hours.
+- DashboardSummaryView now exposes the cached result under low_delta_t_sites.
