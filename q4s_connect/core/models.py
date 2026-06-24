@@ -56,7 +56,7 @@ class ETSSiteBillingConfig(models.Model):
 
     delta_t_tolerance    = models.DecimalField(max_digits=8,  decimal_places=2,default=0.00, blank=True, null=True)
     
-    delta_t_fee_rate     = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    delta_t_fee_rate     = models.DecimalField(max_digits=5, decimal_places=4,default=0.10, blank=True, null=True)
 
     consumption_fee_rate = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
 
@@ -85,6 +85,7 @@ class ETSSiteBilling(models.Model):
     ets_site        = models.ForeignKey(ETSSite, on_delete=models.CASCADE, related_name="billings")
     from_date       = models.DateField()
     to_date         = models.DateField()
+    billing_date    = models.DateField(blank=True, null=True)
     average_delta_t = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     delta_t_fees    = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     consumption     = models.DecimalField(max_digits=14, decimal_places=2, blank=True, null=True)

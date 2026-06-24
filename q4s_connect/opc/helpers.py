@@ -129,7 +129,6 @@ def get_energy_mwh4_daily_accumulated(
 # Calculation of billing data for a site over a date range, including delta-T fees
 # ─────────────────────────────────────────────────────────────────────────────
 
-DELTA_T_FEE_MULTIPLIER = 0.1
 NODE_VALUE_NAMES       = ["VTS", "vts", "Value", "value"]
 SENTINEL_THRESHOLD     = -99998
 def calculate_site_billing(site, start_date, end_date):
@@ -194,6 +193,26 @@ def calculate_site_billing(site, start_date, end_date):
         else 0
     )
 
+    # ── Average supply / return temperatures ──
+    agg_temps = history.filter(
+        node__object__opc_name__in=["temp_supply_c_2", "temp_return_c_3"]
+    ).values("node__object__opc_name").annotate(avg=Avg("actual_value"))
+    temp_map = {row["node__object__opc_name"]: row["avg"] for row in agg_temps}
+    avg_supply_temp = temp_map.get("temp_supply_c_2")
+    avg_return_temp = temp_map.get("temp_return_c_3")
+
+    # ── Average flow & power ──
+    agg_flow_power = history.filter(
+        node__object__opc_name__in=["flow_m3h_1", "power_kw_5"]
+    ).values("node__object__opc_name").annotate(avg=Avg("actual_value"))
+    fp_map = {row["node__object__opc_name"]: row["avg"] for row in agg_flow_power}
+    avg_flow  = fp_map.get("flow_m3h_1")
+    avg_power = fp_map.get("power_kw_5")
+
+    # ── Period stats ──
+    period_days     = (end_date - start_date).days + 1
+    readings_count  = history.filter(node__object__opc_name__iexact="energy_mwh_4").count()
+
     # ── Fees ──
     contracted_delta_t = float(site.contracted_delta_t or 0)
     tolerance_delta_t  = float(config.delta_t_tolerance or 0)
@@ -201,14 +220,14 @@ def calculate_site_billing(site, start_date, end_date):
 
     delta_t_fees = 0.0
     """
-    The Old Method was to calculate the fee based on the difference between 
+    The Old Method was to calculate the fee based on the difference between
 
     if avg_delta_t is not None:
         # take absolute value of delta-T difference (in case actual delta-T is below contracted)
         avg_delta_t=float(abs(avg_delta_t))
         drop = contracted_delta_t - avg_delta_t - tolerance_delta_t
         if drop > 0 :
-            delta_t_fees = (drop) * DELTA_T_FEE_MULTIPLIER * rate_delta_t
+            delta_t_fees = drop * rate_delta_t
     """
     # ---------
     # consumption_fee_rate is used for both consumption and delta-T fees, as per original code.
@@ -217,23 +236,51 @@ def calculate_site_billing(site, start_date, end_date):
     consumption_fee   = consumption * float(config.consumption_fee_rate or 0)
     declared_load_fee = float(site.declared_load_fee or 0)
     delta_t_fees = 0.0
-    
+
+    delta_t_drop = None
     if avg_delta_t is not None:
-        avg_delta_t=float(abs(avg_delta_t))
+        avg_delta_t = float(abs(avg_delta_t))
         drop = contracted_delta_t - avg_delta_t - tolerance_delta_t
-        if drop > 0 :
-            delta_t_fees = (drop) * DELTA_T_FEE_MULTIPLIER * float(declared_load_fee+declared_load_fee)
+        delta_t_drop = round(drop, 4)
+        if drop > 0:
+            delta_t_fees = (drop + tolerance_delta_t) * rate_delta_t * float(declared_load_fee)
 
-
-    total             = declared_load_fee + delta_t_fees + consumption_fee
+    total = declared_load_fee + delta_t_fees + consumption_fee
 
     return {
+        # ── Core billing fields (stored in ETSSiteBilling) ──
         "average_delta_t":   avg_delta_t,
+        "delta_t_drop":      delta_t_drop,
         "delta_t_fees":      round(delta_t_fees, 2),
         "consumption":       round(consumption, 4),
         "consumption_fee":   round(consumption_fee, 2),
         "declared_load_fee": round(declared_load_fee, 2),
         "total":             round(total, 2),
+
+        # ── Energy snapshot ──
+        "energy_start":      round(float(first_reading), 4) if first_reading is not None else None,
+        "energy_end":        round(float(last_reading),  4) if last_reading  is not None else None,
+
+        # ── Temperature averages ──
+        "avg_supply_temp":   round(avg_supply_temp, 2) if avg_supply_temp is not None else None,
+        "avg_return_temp":   round(avg_return_temp, 2) if avg_return_temp is not None else None,
+
+        # ── Flow & power averages ──
+        "avg_flow":          round(avg_flow,  2) if avg_flow  is not None else None,
+        "avg_power":         round(avg_power, 2) if avg_power is not None else None,
+
+        # ── Delta-T analysis ──
+        "contracted_delta_t": contracted_delta_t,
+        "delta_t_drop":       delta_t_drop,          # positive = penalised, negative = healthy
+        "is_low_delta_t":     delta_t_drop is not None and delta_t_drop > 0,
+
+        # ── Period metadata ──
+        "period_days":       period_days,
+        "readings_count":    readings_count,
+
+        # ── Billing date ──
+        "billing_date":      end_date,
+        "billing_period":    end_date,
     }
 
 

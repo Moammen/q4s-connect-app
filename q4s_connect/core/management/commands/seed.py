@@ -227,7 +227,7 @@ class Command(BaseCommand):
             ETSSiteBillingConfig.objects.create(
                 ets_site=site,
                 delta_t_tolerance=0.5,
-                delta_t_fee_rate=15.0 if is_low else 10.0,
+                delta_t_fee_rate=0.15 if is_low else 0.10,
                 consumption_fee_rate=0.4,
                 billing_day=1,
             )
@@ -340,7 +340,7 @@ class Command(BaseCommand):
         today = timezone.localdate()
         delta_t_magnitude = abs(return_temp - supply_temp)
         consumption_fee_rate = 0.4
-        delta_t_fee_rate     = 15.0 if contracted_delta_t > 7 else 10.0
+        delta_t_fee_rate     = 0.15 if contracted_delta_t > 7 else 0.10
         tolerance            = 0.5
 
         for offset in range(1, HISTORY_MONTHS + 1):

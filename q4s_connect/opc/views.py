@@ -1637,25 +1637,16 @@ class OPCSiteDashboardView(APIView):
             end_dt    = timezone.make_aware(datetime.datetime.combine(period_to + datetime.timedelta(days=1), datetime.time.min))
             return period_from, period_to, start_dt, end_dt
 
-        # ── Billing Data ─────────────────────────────────────────────────────
+        # ── Billing Data (always current cycle, never affected by filter) ───────
         def get_billing_data():
             config = getattr(site, "billing_config", None)
             if config is None:
                 return None
-            if not from_date or not to_date:
-                period_from, period_to, _, _ = compute_billing_period(config.billing_day)
-            else:
-                # Parse string dates → date objects
-                try:
-                    period_from = datetime.date.fromisoformat(from_date)
-                    period_to   = datetime.date.fromisoformat(to_date)
-                except ValueError:
-                    # Invalid date format → fall back to billing cycle
-                    period_from, period_to, _, _ = compute_billing_period(config.billing_day)
 
-                
+            # Always use the current billing cycle — ignore from_date / to_date
+            period_from, period_to, _, _ = compute_billing_period(config.billing_day)
 
-            # Already billed for this period? frontend can fetch from /api/ets-billing/
+            # Already billed? frontend fetches from /api/ets-billing/
             if ETSSiteBilling.objects.filter(
                 ets_site=site, from_date=period_from, to_date=period_to
             ).exists():
@@ -1666,25 +1657,109 @@ class OPCSiteDashboardView(APIView):
                 return None
 
             return {
-                "period_from":     period_from,
-                "period_to":       period_to,
-                "avg_delta_t":     round(data["average_delta_t"], 4) if data["average_delta_t"] is not None else None,
-                "consumption":     round(data["consumption"], 4),
-                "declared_load":   round(data["declared_load_fee"], 2),
-                "delta_t_fees":    round(data["delta_t_fees"], 4),
-                "consumption_fee": round(data["consumption_fee"], 4),
-                "total":           round(data["total"], 4),
+                "period_from":        period_from,
+                "period_to":          period_to,
+                "avg_delta_t":        round(data["average_delta_t"], 4) if data["average_delta_t"] is not None else None,
+                "consumption":        round(data["consumption"], 4),
+                "declared_load":      round(data["declared_load_fee"], 2),
+                "delta_t_fees":       round(data["delta_t_fees"], 4),
+                "consumption_fee":    round(data["consumption_fee"], 4),
+                "total":              round(data["total"], 4),
+                "energy_start":       data["energy_start"],
+                "energy_end":         data["energy_end"],
+                "avg_supply_temp":    data["avg_supply_temp"],
+                "avg_return_temp":    data["avg_return_temp"],
+                "avg_flow":           data["avg_flow"],
+                "avg_power":          data["avg_power"],
+                "contracted_delta_t": data["contracted_delta_t"],
+                "delta_t_drop":       data["delta_t_drop"],
+                "is_low_delta_t":     data["is_low_delta_t"],
+                "period_days":        data["period_days"],
+                "readings_count":     data["readings_count"],
+                "billing_date":       data["billing_date"],
             }
+
+        # ── Filtered Billing (complete months only within from_date / to_date) ─
+        def get_filtered_billing():
+            if not from_date or not to_date:
+                return []
+
+            # Robust parse — handles "2026-5-28" (no zero-padding)
+            def _parse(s):
+                try:
+                    parts = s.split("-")
+                    return datetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+                except Exception:
+                    return None
+
+            fd = _parse(from_date)
+            td = _parse(to_date)
+            if fd is None or td is None or fd > td:
+                return []
+
+            import calendar
+            results = []
+
+            # If fd is not the 1st, skip to next month (partial first month = skip)
+            if fd.day == 1:
+                cursor = fd
+            elif fd.month == 12:
+                cursor = fd.replace(year=fd.year + 1, month=1, day=1)
+            else:
+                cursor = fd.replace(month=fd.month + 1, day=1)
+
+            while True:
+                last_day  = calendar.monthrange(cursor.year, cursor.month)[1]
+                month_end = cursor.replace(day=last_day)
+
+                # Stop when month_end goes beyond td (incomplete month at end)
+                if month_end > td:
+                    break
+
+                # Full month is within range — calculate
+                data = calculate_site_billing(site, cursor, month_end)
+                if data is not None:
+                    results.append({
+                        "period_from":        cursor,
+                        "period_to":          month_end,
+                        "avg_delta_t":        round(data["average_delta_t"], 4) if data["average_delta_t"] is not None else None,
+                        "consumption":        round(data["consumption"], 4),
+                        "declared_load":      round(data["declared_load_fee"], 2),
+                        "delta_t_fees":       round(data["delta_t_fees"], 4),
+                        "consumption_fee":    round(data["consumption_fee"], 4),
+                        "total":              round(data["total"], 4),
+                        "energy_start":       data["energy_start"],
+                        "energy_end":         data["energy_end"],
+                        "avg_supply_temp":    data["avg_supply_temp"],
+                        "avg_return_temp":    data["avg_return_temp"],
+                        "avg_flow":           data["avg_flow"],
+                        "avg_power":          data["avg_power"],
+                        "contracted_delta_t": data["contracted_delta_t"],
+                        "delta_t_drop":       data["delta_t_drop"],
+                        "is_low_delta_t":     data["is_low_delta_t"],
+                        "period_days":        data["period_days"],
+                        "readings_count":     data["readings_count"],
+                        "billing_date":       data["billing_date"],
+                    })
+
+                # Advance to next month
+                if cursor.month == 12:
+                    cursor = cursor.replace(year=cursor.year + 1, month=1, day=1)
+                else:
+                    cursor = cursor.replace(month=cursor.month + 1, day=1)
+
+            return results
 
         # =====================================================================
         # Final response
         # =====================================================================
         return Response({
-            "site":          ETSSiteSerializer(site).data,
-            "active_alarms": get_active_alarms(),
-            "objects":       get_objects_with_live(),
-            "node_history":  get_node_history(),
-            "billing_data":  get_billing_data(),
+            "site":             ETSSiteSerializer(site).data,
+            "active_alarms":    get_active_alarms(),
+            "objects":          get_objects_with_live(),
+            "node_history":     get_node_history(),
+            "billing_data":     get_billing_data(),
+            "filtered_billing": get_filtered_billing(),
         })
 
 class OPCSiteObjectsLiveView(APIView):
